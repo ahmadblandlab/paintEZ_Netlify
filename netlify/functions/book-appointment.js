@@ -2,24 +2,44 @@
 const crypto = require('crypto');
 
 // ========================================
-// YOUR TIMETAP CREDENTIALS
+// MULTI-LOCATION CONFIGURATION
+// Must match check-availability.js configuration
 // ========================================
-const BUSINESS_ID = '403923';
-const API_PRIVATE_KEY = '03c87c55bb7f43b0ad77e5bed7f732da';
-const STAFF_ID = 512602;
-const LOCATION_ID = 634895;
-const REASON_ID = 733663;
+const LOCATION_CONFIGS = {
+  'current_location': {
+    businessId: '403923',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 512602,
+    locationId: 634895,
+    reasonId: 733663
+  },
+  'paintez_north_tampa': {
+    businessId: '406031',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 513927,
+    locationId: 635883,
+    reasonId: 735070
+  },
+  'sandbox': {
+    businessId: '403922',
+    apiPrivateKey: '35d46d1dc0a843e8a6e712c6f84258a9',
+    staffId: 512277,
+    locationId: 634571,
+    reasonId: 733416
+  }
+  // Add more locations as franchises get cloned...
+};
 
 // ========================================
 // HELPER: GET TIMETAP SESSION TOKEN
 // ========================================
-async function getTimeTapSession() {
+async function getTimeTapSession(businessId, apiPrivateKey) {
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = crypto.createHash('md5')
-    .update(BUSINESS_ID + API_PRIVATE_KEY)
+    .update(businessId + apiPrivateKey)
     .digest('hex');
 
-  const sessionUrl = `https://api.timetap.com/live/sessionToken?apiKey=${BUSINESS_ID}&timestamp=${timestamp}&signature=${signature}`;
+  const sessionUrl = `https://api.timetap.com/live/sessionToken?apiKey=${businessId}&timestamp=${timestamp}&signature=${signature}`;
 
   const response = await fetch(sessionUrl);
   const data = await response.json();
@@ -31,23 +51,23 @@ async function getTimeTapSession() {
 // ========================================
 function toMilitaryTime(timeString) {
   if (!timeString) return 900;
-  
+
   const cleanTime = timeString.trim().toUpperCase();
-  
+
   if (/^\d{3,4}$/.test(cleanTime.replace(':', ''))) {
     return parseInt(cleanTime.replace(':', ''));
   }
-  
+
   const match = cleanTime.match(/(\d{1,2}):?(\d{2})?\s*(AM|PM)?/);
   if (!match) return 900;
-  
+
   let hour = parseInt(match[1]);
   const minute = parseInt(match[2] || '0');
   const period = match[3];
-  
+
   if (period === 'PM' && hour !== 12) hour += 12;
   if (period === 'AM' && hour === 12) hour = 0;
-  
+
   return hour * 100 + minute;
 }
 
@@ -55,7 +75,6 @@ function toMilitaryTime(timeString) {
 // NETLIFY FUNCTION HANDLER
 // ========================================
 exports.handler = async (event, context) => {
-  // Set CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -63,16 +82,10 @@ exports.handler = async (event, context) => {
     'Content-Type': 'application/json'
   };
 
-  // Handle preflight request
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers,
-      body: ''
-    };
+    return { statusCode: 200, headers, body: '' };
   }
 
-  // Only allow POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -82,9 +95,9 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Parse request body
     const body = JSON.parse(event.body || '{}');
     const {
+      location_id,
       customer_first_name,
       customer_last_name,
       customer_phone,
@@ -95,16 +108,55 @@ exports.handler = async (event, context) => {
       project_type
     } = body;
 
-    // Convert time
+    // ========================================
+    // LOOKUP LOCATION CONFIGURATION
+    // ========================================
+    if (!location_id) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Missing required parameter: location_id',
+          hint: 'Add location_id to request body (e.g., "paintez_north_tampa")',
+          available_locations: Object.keys(LOCATION_CONFIGS)
+        })
+      };
+    }
+
+    const config = LOCATION_CONFIGS[location_id];
+
+    if (!config) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: `Unknown location_id: ${location_id}`,
+          available_locations: Object.keys(LOCATION_CONFIGS),
+          hint: 'Use one of the available_locations listed above'
+        })
+      };
+    }
+
+    console.log(`Booking appointment for: ${location_id}`);
+
+    // Extract credentials for this location
+    const { businessId, apiPrivateKey, staffId, locationId, reasonId } = config;
+
+    // ========================================
+    // CONVERT TIME AND GET SESSION
+    // ========================================
     const militaryTime = toMilitaryTime(confirmed_appointment_time);
     const endTime = militaryTime + 100;
 
-    // Get session token
-    const sessionToken = await getTimeTapSession();
+    const sessionToken = await getTimeTapSession(businessId, apiPrivateKey);
 
-    // Build appointment payload
+    // ========================================
+    // BUILD APPOINTMENT PAYLOAD
+    // ========================================
     const appointmentPayload = {
-      businessId: parseInt(BUSINESS_ID),
+      businessId: parseInt(businessId),
       client: {
         firstName: customer_first_name || "Unknown",
         lastName: customer_last_name || "Customer",
@@ -120,9 +172,9 @@ exports.handler = async (event, context) => {
       endDate: requested_appointment_date,
       startTime: militaryTime,
       endTime: endTime,
-      location: { locationId: LOCATION_ID },
-      staff: { professionalId: STAFF_ID },
-      reason: { reasonId: REASON_ID },
+      location: { locationId: locationId },
+      staff: { professionalId: staffId },
+      reason: { reasonId: reasonId },
       clientReminderHours: 24,
       staffReminderHours: 24,
       remindClientSmsHrs: 2,
@@ -133,7 +185,11 @@ exports.handler = async (event, context) => {
       note: `Project Type: ${project_type || 'Not specified'}. Address: ${property_address || 'Not specified'}.`
     };
 
-    // Book appointment
+    console.log('Booking payload:', JSON.stringify(appointmentPayload, null, 2));
+
+    // ========================================
+    // BOOK APPOINTMENT
+    // ========================================
     const bookingUrl = 'https://api.timetap.com/live/appointments';
     const bookingResponse = await fetch(bookingUrl, {
       method: 'POST',
@@ -144,7 +200,25 @@ exports.handler = async (event, context) => {
       body: JSON.stringify(appointmentPayload)
     });
 
-    const bookingResult = await bookingResponse.json();
+    const responseText = await bookingResponse.text();
+    console.log('TimeTap response:', responseText);
+
+    let bookingResult;
+    try {
+      bookingResult = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse response:', responseText);
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'TimeTap returned non-JSON response',
+          raw_response: responseText.substring(0, 500),
+          status_message: 'Booking failed - TimeTap API error'
+        })
+      };
+    }
 
     if (bookingResponse.ok) {
       return {
@@ -157,6 +231,7 @@ exports.handler = async (event, context) => {
           appointment_date: requested_appointment_date,
           appointment_time: confirmed_appointment_time,
           customer_name: `${customer_first_name} ${customer_last_name}`,
+          location_id: location_id,
           status_message: 'Appointment booked successfully!'
         })
       };
@@ -166,20 +241,21 @@ exports.handler = async (event, context) => {
         headers,
         body: JSON.stringify({
           success: false,
-          error: JSON.stringify(bookingResult),
-          status_message: 'Booking failed'
+          error: bookingResult,
+          status_message: 'Booking failed - check error field'
         })
       };
     }
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Booking error:', error);
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         success: false,
         error: error.message,
+        stack: error.stack,
         status_message: 'Booking failed with exception'
       })
     };
