@@ -2,24 +2,44 @@
 const crypto = require('crypto');
 
 // ========================================
-// YOUR TIMETAP CREDENTIALS
+// MULTI-LOCATION CONFIGURATION
+// Add new franchises here as they get onboarded
 // ========================================
-const BUSINESS_ID = '403923';
-const API_PRIVATE_KEY = '03c87c55bb7f43b0ad77e5bed7f732da';
-const STAFF_ID = 512602;
-const LOCATION_ID = 634895;
-const REASON_ID = 733663;
+const LOCATION_CONFIGS = {
+  'current_location': {
+    businessId: '403923',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 512602,
+    locationId: 634895,
+    reasonId: 733663
+  },
+  'paintez_north_tampa': {
+    businessId: '406031',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 513927,
+    locationId: 635883,
+    reasonId: 735070
+  },
+  'sandbox': {
+    businessId: '403922',
+    apiPrivateKey: '35d46d1dc0a843e8a6e712c6f84258a9',
+    staffId: 512277,
+    locationId: 634571,
+    reasonId: 733416
+  }
+  // Add more locations as franchises get cloned...
+};
 
 // ========================================
 // HELPER: GET TIMETAP SESSION TOKEN
 // ========================================
-async function getTimeTapSession() {
+async function getTimeTapSession(businessId, apiPrivateKey) {
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = crypto.createHash('md5')
-    .update(BUSINESS_ID + API_PRIVATE_KEY)
+    .update(businessId + apiPrivateKey)
     .digest('hex');
 
-  const sessionUrl = `https://api.timetap.com/live/sessionToken?apiKey=${BUSINESS_ID}&timestamp=${timestamp}&signature=${signature}`;
+  const sessionUrl = `https://api.timetap.com/live/sessionToken?apiKey=${businessId}&timestamp=${timestamp}&signature=${signature}`;
 
   const response = await fetch(sessionUrl);
   const data = await response.json();
@@ -42,7 +62,6 @@ function formatTime(militaryTime) {
 // NETLIFY FUNCTION HANDLER
 // ========================================
 exports.handler = async (event, context) => {
-  // Set CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -50,16 +69,10 @@ exports.handler = async (event, context) => {
     'Content-Type': 'application/json'
   };
 
-  // Handle preflight request
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers,
-      body: ''
-    };
+    return { statusCode: 200, headers, body: '' };
   }
 
-  // Only allow POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -69,11 +82,48 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Parse request body
     const body = JSON.parse(event.body || '{}');
-    const { requested_appointment_date } = body;
+    const { location_id, requested_appointment_date } = body;
 
-    // Parse date
+    // ========================================
+    // LOOKUP LOCATION CONFIGURATION
+    // ========================================
+    if (!location_id) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Missing required parameter: location_id',
+          hint: 'Add location_id to request body (e.g., "paintez_north_tampa")',
+          available_locations: Object.keys(LOCATION_CONFIGS)
+        })
+      };
+    }
+
+    const config = LOCATION_CONFIGS[location_id];
+
+    if (!config) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: `Unknown location_id: ${location_id}`,
+          available_locations: Object.keys(LOCATION_CONFIGS),
+          hint: 'Use one of the available_locations listed above'
+        })
+      };
+    }
+
+    console.log(`Checking availability for: ${location_id}`);
+
+    // Extract credentials for this location
+    const { businessId, apiPrivateKey, staffId, locationId, reasonId } = config;
+
+    // ========================================
+    // PARSE DATE
+    // ========================================
     let year, month, day;
     if (requested_appointment_date && requested_appointment_date.includes('-')) {
       const parts = requested_appointment_date.split('-');
@@ -88,12 +138,16 @@ exports.handler = async (event, context) => {
       day = tomorrow.getDate().toString().padStart(2, '0');
     }
 
-    // Get session token
-    const sessionToken = await getTimeTapSession();
+    // ========================================
+    // GET SESSION TOKEN
+    // ========================================
+    const sessionToken = await getTimeTapSession(businessId, apiPrivateKey);
 
-    // Get available slots
-    const availabilityUrl = `https://api.timetap.com/live/availability/${year}/${month}/${day}/${STAFF_ID}/${LOCATION_ID}/${REASON_ID}`;
-    
+    // ========================================
+    // GET AVAILABLE SLOTS
+    // ========================================
+    const availabilityUrl = `https://api.timetap.com/live/availability/${year}/${month}/${day}/${staffId}/${locationId}/${reasonId}`;
+
     const availResponse = await fetch(availabilityUrl, {
       headers: {
         'Authorization': `Bearer ${sessionToken}`,
@@ -103,7 +157,9 @@ exports.handler = async (event, context) => {
 
     const availableSlots = await availResponse.json();
 
-    // Format response
+    // ========================================
+    // FORMAT RESPONSE
+    // ========================================
     if (!Array.isArray(availableSlots) || availableSlots.length === 0) {
       return {
         statusCode: 200,
@@ -111,7 +167,8 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({
           available_times: "no available times",
           success: false,
-          requested_date: `${year}-${month}-${day}`
+          requested_date: `${year}-${month}-${day}`,
+          location_id: location_id
         })
       };
     }
@@ -126,21 +183,23 @@ exports.handler = async (event, context) => {
         available_times: timesString,
         available_slots_json: JSON.stringify(availableSlots),
         requested_date: `${year}-${month}-${day}`,
-        staff_id: STAFF_ID,
-        location_id: LOCATION_ID,
-        reason_id: REASON_ID,
+        location_id: location_id,
+        staff_id: staffId,
+        timetap_location_id: locationId,
+        reason_id: reasonId,
         success: true
       })
     };
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Availability check error:', error);
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         success: false,
-        error: error.message
+        error: error.message,
+        stack: error.stack
       })
     };
   }
