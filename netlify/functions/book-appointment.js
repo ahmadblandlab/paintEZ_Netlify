@@ -145,12 +145,54 @@ exports.handler = async (event, context) => {
     const { businessId, apiPrivateKey, staffId, locationId, reasonId } = config;
 
     // ========================================
-    // CONVERT TIME AND GET SESSION
+    // GET SESSION TOKEN
     // ========================================
-    const militaryTime = toMilitaryTime(confirmed_appointment_time);
-    const endTime = militaryTime + 100;
-
     const sessionToken = await getTimeTapSession(businessId, apiPrivateKey);
+
+    // ========================================
+    // FETCH AVAILABILITY TO GET CORRECT TIMEZONE SLOT
+    // ========================================
+    // Parse the date
+    const dateParts = requested_appointment_date.split('-');
+    const year = dateParts[0];
+    const month = dateParts[1];
+    const day = dateParts[2];
+
+    // Get availability for this date to find the exact slot
+    const availabilityUrl = `https://api.timetap.com/live/availability/${year}/${month}/${day}/${staffId}/${locationId}/${reasonId}`;
+
+    const availResponse = await fetch(availabilityUrl, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const availableSlots = await availResponse.json();
+
+    // Convert customer's chosen time to military time
+    const customerMilitaryTime = toMilitaryTime(confirmed_appointment_time);
+
+    // Find the matching slot based on clientStartTime
+    const matchingSlot = availableSlots.find(slot => slot.clientStartTime === customerMilitaryTime);
+
+    if (!matchingSlot) {
+      console.error(`No slot found for time ${confirmed_appointment_time} (${customerMilitaryTime})`);
+      console.error('Available slots:', JSON.stringify(availableSlots, null, 2));
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: `Selected time ${confirmed_appointment_time} is not available`,
+          hint: 'Please call check-availability first to get current available times'
+        })
+      };
+    }
+
+    // Use the actual slot times (handles timezone automatically)
+    const militaryTime = matchingSlot.startTime;
+    const endTime = matchingSlot.endTime;
 
     // ========================================
     // BUILD APPOINTMENT PAYLOAD
