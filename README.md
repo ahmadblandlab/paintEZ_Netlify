@@ -76,6 +76,22 @@
 
 ---
 
+### **🕐 Recent Fix: Timezone Handling (November 2025)**
+
+**Issue Fixed:** Bookings would fail with "outside of Staff Availability" error even when selecting available times.
+
+**Root Cause:** Timezone differences between customer display times and staff working times were not being handled. When a staff member was in Mountain Time (Denver) and a customer saw "9:00 AM" as available, that was actually an 11:00 AM slot in the staff's timezone. The system was sending 9:00 AM directly to TimeTap, which didn't match.
+
+**Solution Implemented:**
+- System now queries availability before booking
+- Matches customer's chosen time to the correct staff timezone slot
+- Books using the actual staff working time automatically
+- **Completely automatic** - no configuration needed!
+
+**Result:** Bookings now work correctly across all timezones without any manual timezone configuration! ✅
+
+---
+
 ## 🧠 How It Works (Non-Technical)
 
 ### **The Date → Times → Book Flow**
@@ -239,10 +255,13 @@ Done! ✅
 
 **What it does:**
 1. Looks up credentials for `location_id`
-2. Converts time format ("2:00 PM" → 1400 military time)
-3. Authenticates with TimeTap
-4. Creates appointment with all customer details
-5. Returns confirmation to Bland AI
+2. Authenticates with TimeTap
+3. **Queries availability to get correct timezone slot** (handles timezone automatically)
+4. Matches customer's chosen time to the actual staff working time
+5. Creates appointment with all customer details using correct timezone
+6. Returns confirmation to Bland AI
+
+**Note:** The timezone handling (step 3-4) ensures bookings work correctly even when staff and customers are in different timezones. The system automatically translates customer display times to staff working times.
 
 ---
 
@@ -899,19 +918,26 @@ const LOCATION_CONFIGS = {
 #### **Error 6: Times shown but booking fails**
 
 **Symptoms:**
-- Check availability works
-- Booking returns error
+- Check availability works and returns times
+- Booking one of those times returns "outside of Staff Availability" error
 
-**Common causes:**
-- Customer info missing/invalid
-- Time format incorrect
-- Date format incorrect
+**This issue has been fixed!** ✅
 
-**Fix:**
-- Ensure all 8 parameters are sent to book-appointment
+**What was happening:**
+The system now automatically handles timezone differences between customer display times and staff working times. Previously, if a customer selected "9:00 AM" from available times, but the staff was in a different timezone (e.g., Mountain Time), the booking would fail because we were sending the customer's time directly instead of the staff's actual working time.
+
+**How it works now:**
+- Before booking, the system queries availability to get the full slot data
+- Matches the customer's chosen time to find the corresponding staff timezone time
+- Books using the correct staff timezone automatically
+- **No configuration needed** - it just works!
+
+**If you still get booking errors:**
+- Ensure all 8 required parameters are sent to book-appointment
 - Verify date is YYYY-MM-DD format
-- Verify time matches one from available_times
-- Check Netlify function logs for details
+- Verify time exactly matches one from available_times (including AM/PM)
+- The time must be currently available (check availability first)
+- Check Netlify function logs for specific error details
 
 ---
 
