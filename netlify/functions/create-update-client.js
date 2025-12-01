@@ -13,6 +13,8 @@ const CLIENTTETHER_CONFIG = {
 // ========================================
 // HELPER: CREATE NEW CLIENT
 // Creates a new client record in ClientTether
+// API Endpoint: create_client
+// Required fields: firstName, lastName
 // ========================================
 async function createClient(clientData) {
   const createUrl = `${CLIENTTETHER_CONFIG.baseUrl}/create_client`;
@@ -37,10 +39,12 @@ async function createClient(clientData) {
 }
 
 // ========================================
-// HELPER: UPDATE EXISTING CLIENT
+// HELPER: UPDATE EXISTING CLIENT BY ID
 // Updates an existing client record in ClientTether
+// API Endpoint: update_client_by_id
+// Required field: client_id
 // ========================================
-async function updateClient(clientId, clientData) {
+async function updateClientById(clientId, clientData) {
   const updateUrl = `${CLIENTTETHER_CONFIG.baseUrl}/update_client_by_id`;
 
   const response = await fetch(updateUrl, {
@@ -106,56 +110,63 @@ exports.handler = async (event, context) => {
       appointment_date,
       appointment_time,
       appointment_id,
-      notes
+      notes,
+      external_id
     } = body;
 
     // ========================================
     // VALIDATE INPUT
+    // For create: firstName and lastName are required
+    // For update: client_id is required
     // ========================================
-    if (!customer_phone && !customer_email) {
+    if (!client_id && (!customer_first_name || !customer_last_name)) {
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({
           success: false,
-          error: 'Missing required parameter: customer_phone or customer_email',
-          hint: 'Provide at least one contact method for the client'
-        })
-      };
-    }
-
-    if (!customer_first_name && !customer_last_name) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({
-          success: false,
-          error: 'Missing required parameter: customer_first_name or customer_last_name',
-          hint: 'Provide at least customer name'
+          error: 'Missing required parameters',
+          hint: 'For new clients: customer_first_name and customer_last_name are required. For updates: client_id is required.'
         })
       };
     }
 
     // ========================================
     // BUILD CLIENT PAYLOAD
-    // Adjust field names based on actual ClientTether API requirements
+    // Using ClientTether API field names from documentation:
+    // firstName, lastName, phone, email, address, city, state, zip
+    // Custom fields: any non-reserved parameter name accepted as String
     // ========================================
-    const clientPayload = {
-      first_name: customer_first_name || '',
-      last_name: customer_last_name || '',
-      phone: customer_phone || '',
-      email: customer_email || '',
-      address: property_address || '',
-      city: city || '',
-      state: state || '',
-      zip: zip_code || '',
-      // Custom fields for appointment information
-      project_type: project_type || '',
-      appointment_date: appointment_date || '',
-      appointment_time: appointment_time || '',
-      timetap_appointment_id: appointment_id || '',
-      notes: notes || `Appointment booked via Bland AI on ${appointment_date} at ${appointment_time}. Project: ${project_type || 'Not specified'}.`
-    };
+    const clientPayload = {};
+
+    // Standard ClientTether fields
+    if (customer_first_name) clientPayload.firstName = customer_first_name;
+    if (customer_last_name) clientPayload.lastName = customer_last_name;
+    if (customer_phone) {
+      // Clean phone - 10 digits only, no formatting
+      clientPayload.phone = customer_phone.replace(/\D/g, '');
+    }
+    if (customer_email) clientPayload.email = customer_email;
+    if (property_address) clientPayload.address = property_address;
+    if (city) clientPayload.city = city;
+    if (state) clientPayload.state = state;
+    if (zip_code) clientPayload.zip = zip_code;
+    if (external_id) clientPayload.external_id = external_id;
+
+    // Custom expansion fields
+    // ClientTether accepts any non-reserved parameter name as a String
+    if (project_type) clientPayload.project_type = project_type;
+    if (appointment_date) clientPayload.appointment_date = appointment_date;
+    if (appointment_time) clientPayload.appointment_time = appointment_time;
+    if (appointment_id) clientPayload.timetap_appointment_id = appointment_id;
+
+    // Whiteboard field - visible notes in ClientTether
+    if (notes) {
+      clientPayload.whiteboard = notes;
+    } else if (appointment_date && appointment_time) {
+      // Generate default note
+      clientPayload.whiteboard = `Appointment booked via Bland AI on ${appointment_date} at ${appointment_time}. Project: ${project_type || 'Not specified'}. TimeTap ID: ${appointment_id || 'N/A'}`;
+    }
 
     console.log('Client payload:', JSON.stringify(clientPayload, null, 2));
 
@@ -164,42 +175,57 @@ exports.handler = async (event, context) => {
     // ========================================
     let result;
     let operation;
+    let returnedClientId;
 
     if (client_id) {
       // Update existing client
       console.log(`Updating existing client: ${client_id}`);
       operation = 'update';
-      result = await updateClient(client_id, clientPayload);
+      result = await updateClientById(client_id, clientPayload);
+
+      // Response format: {"resultCode":"CT200", "Message":"Success"}
+      // Plus all client data fields returned
+      returnedClientId = client_id;
     } else {
       // Create new client
       console.log('Creating new client');
       operation = 'create';
       result = await createClient(clientPayload);
+
+      // Response format: {"ResultCode":"CT_200","Message":"Success","TotalRecord":1,"data":[{"client_id":"8475832","external_id":"1234"}]}
+      if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+        returnedClientId = result.data[0].client_id;
+      } else {
+        returnedClientId = 'unknown';
+      }
     }
 
     // ========================================
     // FORMAT RESPONSE
     // ========================================
-    // Extract client ID from response
-    // Note: Adjust based on actual API response structure
-    const returnedClientId = result.id || result.client_id || result.data?.id || client_id || 'unknown';
+    const resultCode = result.ResultCode || result.resultCode;
+    const success = (resultCode === 'CT_200' || resultCode === 'CT200');
 
     return {
-      statusCode: 200,
+      statusCode: success ? 200 : 400,
       headers,
       body: JSON.stringify({
-        success: true,
+        success: success,
         operation: operation,
         client_id: returnedClientId,
-        customer_name: `${customer_first_name} ${customer_last_name}`,
+        external_id: result.data?.[0]?.external_id || external_id || null,
+        customer_name: `${customer_first_name || ''} ${customer_last_name || ''}`.trim(),
         customer_phone: customer_phone,
         customer_email: customer_email,
         appointment_date: appointment_date,
         appointment_time: appointment_time,
         timetap_appointment_id: appointment_id,
-        message: operation === 'create'
-          ? 'New client created successfully in ClientTether'
-          : 'Existing client updated successfully in ClientTether',
+        message: success
+          ? (operation === 'create'
+            ? 'New client created successfully in ClientTether'
+            : 'Existing client updated successfully in ClientTether')
+          : 'Operation failed - see api_response for details',
+        result_code: resultCode,
         api_response: result
       })
     };
@@ -213,7 +239,7 @@ exports.handler = async (event, context) => {
         success: false,
         error: error.message,
         stack: error.stack,
-        hint: 'Check ClientTether API endpoint, credentials, and payload format'
+        hint: 'Check ClientTether API endpoint, credentials, and payload format. Verify X-Access-Token and X-Web-Key are correct.'
       })
     };
   }
