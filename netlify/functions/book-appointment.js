@@ -2,6 +2,15 @@
 const crypto = require('crypto');
 
 // ========================================
+// CLIENTTETHER CRM CONFIGURATION
+// ========================================
+const CLIENTTETHER_CONFIG = {
+  accessToken: 'ctk-38ZQKA77wUKuv8VEbBCZVf9KaC3qQyOhMjkbnXhDW8m0_qAxSS4h2WqkQsOHTxAD',
+  webKey: 'wbk-Kz9ePmHBD2kShEHLOuF91V1AJv52jZr',
+  apiUrl: 'https://api.clienttether.com/v2/api/create_client'
+};
+
+// ========================================
 // MULTI-LOCATION CONFIGURATION
 // Must match check-availability.js configuration
 // ========================================
@@ -69,6 +78,48 @@ function toMilitaryTime(timeString) {
   if (period === 'AM' && hour === 12) hour = 0;
 
   return hour * 100 + minute;
+}
+
+// ========================================
+// HELPER: SYNC TO CLIENTTETHER CRM
+// ========================================
+async function syncToClientTether(customerData) {
+  try {
+    const { first_name, last_name, phone, address, zip } = customerData;
+
+    const payload = {
+      access_token: CLIENTTETHER_CONFIG.accessToken,
+      web_key: CLIENTTETHER_CONFIG.webKey,
+      first_name: first_name || '',
+      last_name: last_name || '',
+      phone: phone || '',
+      address: address || '',
+      zip: zip || ''
+    };
+
+    console.log('Syncing to ClientTether:', JSON.stringify(payload, null, 2));
+
+    const response = await fetch(CLIENTTETHER_CONFIG.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      console.log('✅ ClientTether sync successful:', result);
+      return { success: true, result };
+    } else {
+      console.error('⚠️ ClientTether sync failed:', result);
+      return { success: false, error: result };
+    }
+  } catch (error) {
+    console.error('⚠️ ClientTether sync exception:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 // ========================================
@@ -263,6 +314,26 @@ exports.handler = async (event, context) => {
     }
 
     if (bookingResponse.ok) {
+      // ========================================
+      // SYNC TO CLIENTTETHER CRM (NON-BLOCKING)
+      // ========================================
+      // Don't await - sync in background, don't fail booking if CRM sync fails
+      syncToClientTether({
+        first_name: customer_first_name,
+        last_name: customer_last_name,
+        phone: customer_phone,
+        address: property_address,
+        zip: zip_code
+      }).then(syncResult => {
+        if (syncResult.success) {
+          console.log('✅ Customer synced to ClientTether CRM');
+        } else {
+          console.error('⚠️ ClientTether sync failed (booking still succeeded):', syncResult.error);
+        }
+      }).catch(syncError => {
+        console.error('⚠️ ClientTether sync exception (booking still succeeded):', syncError);
+      });
+
       return {
         statusCode: 200,
         headers,
