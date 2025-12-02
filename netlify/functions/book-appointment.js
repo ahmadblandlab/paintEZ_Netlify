@@ -3,10 +3,12 @@ const crypto = require('crypto');
 
 // ========================================
 // CLIENTTETHER CRM CONFIGURATION
+// Verified against official API v2.0 documentation
+// Uses X-Access-Token and X-Web-Key authentication in headers
 // ========================================
 const CLIENTTETHER_CONFIG = {
-  accessToken: 'ctk-38ZQKA77wUKuv8VEbBCZVf9KaC3qQyOhMjkbnXhDW8m0_qAxSS4h2WqkQsOHTxAD',
-  webKey: 'wbk-Kz9ePmHBD2kShEHLOuF91V1AJv52jZr',
+  accessToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJqYXNvbmFsbGVuIiwicm9sZSI6IjUiLCJvcmlnaW4iOiIxIn0.ej3zJE5Ju6rAdU0XctXW-KjS8l52pPdbkEEsDQhPzDc',
+  webKey: 'CT_574bf374ca11e449b9b6ffd83d71e341',
   apiUrl: 'https://api.clienttether.com/v2/api/create_client'
 };
 
@@ -82,26 +84,29 @@ function toMilitaryTime(timeString) {
 
 // ========================================
 // HELPER: SYNC TO CLIENTTETHER CRM
+// Uses correct ClientTether API v2.0 format verified from official docs
 // ========================================
 async function syncToClientTether(customerData) {
   try {
     const { first_name, last_name, phone, address, zip } = customerData;
 
+    // Build payload with correct field names (camelCase, not snake_case)
     const payload = {
-      access_token: CLIENTTETHER_CONFIG.accessToken,
-      web_key: CLIENTTETHER_CONFIG.webKey,
-      first_name: first_name || '',
-      last_name: last_name || '',
-      phone: phone || '',
+      firstName: first_name || '',
+      lastName: last_name || '',
+      phone: (phone || '').replace(/\D/g, ''),  // Clean to 10 digits only
       address: address || '',
       zip: zip || ''
     };
 
     console.log('Syncing to ClientTether:', JSON.stringify(payload, null, 2));
 
+    // Use correct authentication: X-Access-Token and X-Web-Key in HEADERS
     const response = await fetch(CLIENTTETHER_CONFIG.apiUrl, {
       method: 'POST',
       headers: {
+        'X-Access-Token': CLIENTTETHER_CONFIG.accessToken,
+        'X-Web-Key': CLIENTTETHER_CONFIG.webKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
@@ -109,7 +114,11 @@ async function syncToClientTether(customerData) {
 
     const result = await response.json();
 
-    if (response.ok) {
+    // Check for ClientTether success codes (CT_200 or CT200)
+    const resultCode = result.ResultCode || result.resultCode;
+    const isSuccess = (resultCode === 'CT_200' || resultCode === 'CT200');
+
+    if (isSuccess) {
       console.log('✅ ClientTether sync successful:', result);
       return { success: true, result };
     } else {
