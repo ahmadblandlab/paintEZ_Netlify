@@ -88,13 +88,14 @@ function toMilitaryTime(timeString) {
 // ========================================
 async function syncToClientTether(customerData) {
   try {
-    const { first_name, last_name, phone, address, zip } = customerData;
+    const { first_name, last_name, phone, email, address, zip } = customerData;
 
     // Build payload with correct field names (camelCase, not snake_case)
     const payload = {
       firstName: first_name || '',
       lastName: last_name || '',
       phone: (phone || '').replace(/\D/g, ''),  // Clean to 10 digits only
+      email: email || '',
       address: address || '',
       zip: zip || ''
     };
@@ -161,6 +162,7 @@ exports.handler = async (event, context) => {
       customer_first_name,
       customer_last_name,
       customer_phone,
+      customer_email,
       property_address,
       zip_code,
       requested_appointment_date,
@@ -257,14 +259,25 @@ exports.handler = async (event, context) => {
     // ========================================
     // BUILD APPOINTMENT PAYLOAD
     // ========================================
+    const fullName = `${customer_first_name || 'Unknown'} ${customer_last_name || 'Customer'}`.trim();
+
     const appointmentPayload = {
       businessId: parseInt(businessId),
       client: {
         firstName: customer_first_name || "Unknown",
         lastName: customer_last_name || "Customer",
+        fullName: fullName,
         cellPhone: customer_phone || "",
+        emailAddress: customer_email || "",
         address: property_address || "",
-        zip: zip_code || ""
+        zip: zip_code || "",
+        fields: [
+          { code: "firstName", value: customer_first_name || "Unknown" },
+          { code: "lastName", value: customer_last_name || "Customer" },
+          { code: "fullName", value: fullName },
+          { code: "emailAddress", value: customer_email || "" },
+          { code: "cellPhone", value: customer_phone || "" }
+        ]
       },
       clientStartDate: requested_appointment_date,
       clientEndDate: requested_appointment_date,
@@ -331,6 +344,7 @@ exports.handler = async (event, context) => {
         first_name: customer_first_name,
         last_name: customer_last_name,
         phone: customer_phone,
+        email: customer_email,
         address: property_address,
         zip: zip_code
       }).then(syncResult => {
