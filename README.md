@@ -78,6 +78,7 @@ Netlify Functions (API Layer)
   "customer_first_name": "Sarah",
   "customer_last_name": "Johnson",
   "customer_phone": "555-123-4567",
+  "customer_email": "sarah@example.com",
   "property_address": "123 Main St",
   "zip_code": "90210",
   "requested_appointment_date": "2025-12-20",
@@ -366,6 +367,7 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/book-appointme
     "customer_first_name": "Test",
     "customer_last_name": "User",
     "customer_phone": "555-0000",
+    "customer_email": "test@example.com",
     "property_address": "123 Test St",
     "zip_code": "12345",
     "requested_appointment_date": "2025-12-21",
@@ -446,6 +448,7 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/create-update-
 - `customer_first_name`
 - `customer_last_name`
 - `customer_phone`
+- `customer_email` (required for TimeTap client creation)
 - `property_address`
 - `zip_code`
 - `requested_appointment_date` (YYYY-MM-DD)
