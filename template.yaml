@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: PaintEZ Multi-Location Appointment & CRM System
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: nodejs18.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        NODE_ENV: production
+
+Resources:
+  # ========================================
+  # Lambda Functions
+  # ========================================
+
+  CheckAvailabilityFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-check-availability
+      CodeUri: netlify/functions/
+      Handler: check-availability.handler
+      Description: Check appointment availability for a location
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /check-availability
+            Method: POST
+            ApiId: !Ref PaintEZApi
+
+  BookAppointmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-book-appointment
+      CodeUri: netlify/functions/
+      Handler: book-appointment.handler
+      Description: Book appointment and sync to CRM
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /book-appointment
+            Method: POST
+            ApiId: !Ref PaintEZApi
+
+  CheckClientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-check-client
+      CodeUri: netlify/functions/
+      Handler: check-client.handler
+      Description: Check if client exists in ClientTether CRM
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /check-client
+            Method: POST
+            ApiId: !Ref PaintEZApi
+
+  CreateUpdateClientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-create-update-client
+      CodeUri: netlify/functions/
+      Handler: create-update-client.handler
+      Description: Create or update client in ClientTether CRM
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /create-update-client
+            Method: POST
+            ApiId: !Ref PaintEZApi
+
+  DeleteClientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-delete-client
+      CodeUri: netlify/functions/
+      Handler: delete-client.handler
+      Description: Delete client from ClientTether CRM
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /delete-client
+            Method: POST
+            ApiId: !Ref PaintEZApi
+
+  SetupLocationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-setup-location
+      CodeUri: netlify/functions/
+      Handler: setup-location.handler
+      Description: Setup new franchise location
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /setup-location
+            Method: POST
+            ApiId: !Ref PaintEZApi
+
+  ValidateZipcodeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-validate-zipcode
+      CodeUri: netlify/functions/
+      Handler: validate-zipcode.handler
+      Description: Validate zipcode
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /validate-zipcode
+            Method: POST
+            ApiId: !Ref PaintEZApi
+
+  # ========================================
+  # API Gateway HTTP API
+  # ========================================
+
+  PaintEZApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - "Content-Type"
+        AllowMethods:
+          - POST
+          - OPTIONS
+
+# ========================================
+# Outputs - Your API URLs
+# ========================================
+
+Outputs:
+  ApiUrl:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+
+  CheckAvailabilityUrl:
+    Description: "Check Availability Endpoint"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod/check-availability"
+
+  BookAppointmentUrl:
+    Description: "Book Appointment Endpoint"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod/book-appointment"
+
+  CheckClientUrl:
+    Description: "Check Client Endpoint"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod/check-client"
+
+  CreateUpdateClientUrl:
+    Description: "Create/Update Client Endpoint"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod/create-update-client"
+
+  DeleteClientUrl:
+    Description: "Delete Client Endpoint"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod/delete-client"
+
+  SetupLocationUrl:
+    Description: "Setup Location Endpoint"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod/setup-location"
+
+  ValidateZipcodeUrl:
+    Description: "Validate Zipcode Endpoint"
+    Value: !Sub "https://${PaintEZApi}.execute-api.${AWS::Region}.amazonaws.com/prod/validate-zipcode"
