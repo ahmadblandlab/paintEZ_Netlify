@@ -269,14 +269,17 @@ exports.handler = async (event, context) => {
         fullName: fullName,
         cellPhone: customer_phone || "",
         emailAddress: customer_email || "",
-        address: property_address || "",
+        address1: property_address || "",
         zip: zip_code || "",
+        status: "Active",
         fields: [
           { code: "firstName", value: customer_first_name || "Unknown" },
           { code: "lastName", value: customer_last_name || "Customer" },
           { code: "fullName", value: fullName },
           { code: "emailAddress", value: customer_email || "" },
-          { code: "cellPhone", value: customer_phone || "" }
+          { code: "cellPhone", value: customer_phone || "" },
+          { code: "address1", value: property_address || "" },
+          { code: "zip", value: zip_code || "" }
         ]
       },
       clientStartDate: requested_appointment_date,
