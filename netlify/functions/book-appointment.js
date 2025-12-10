@@ -58,6 +58,81 @@ async function getTimeTapSession(businessId, apiPrivateKey) {
 }
 
 // ========================================
+// HELPER: SEARCH FOR EXISTING CLIENT IN TIMETAP
+// Searches by phone number (primary identifier)
+// Returns clientId if found, null if not found
+// ========================================
+async function searchTimeTapClient(sessionToken, businessId, phone) {
+  try {
+    // Clean phone number - remove all non-digits
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+
+    if (!cleanPhone) {
+      console.log('No phone provided for client search');
+      return null;
+    }
+
+    // Search for client by phone using GET /clients endpoint
+    const searchUrl = `https://api.timetap.com/live/clients?businessId=${businessId}&cellPhone=${cleanPhone}`;
+
+    const response = await fetch(searchUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.error('TimeTap client search failed:', response.status);
+      return null; // Return null if search fails, will create new client
+    }
+
+    const clients = await response.json();
+
+    // Check if any clients were found
+    if (clients && Array.isArray(clients) && clients.length > 0) {
+      const clientId = clients[0].clientId;
+      console.log(`✅ Existing TimeTap client found: ${clientId}`);
+      return clientId;
+    }
+
+    console.log('No existing TimeTap client found');
+    return null;
+  } catch (error) {
+    console.error('Error searching for TimeTap client:', error.message);
+    return null; // Return null on error, will create new client
+  }
+}
+
+// ========================================
+// HELPER: CREATE CLIENT IN TIMETAP
+// Creates a client first, returns clientId
+// ========================================
+async function createTimeTapClient(sessionToken, clientData) {
+  const createClientUrl = 'https://api.timetap.com/live/clients';
+
+  const response = await fetch(createClientUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(clientData)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('TimeTap client creation failed:', errorText);
+    throw new Error(`Failed to create client: ${response.status}`);
+  }
+
+  const result = await response.json();
+  console.log('TimeTap client created:', result);
+  return result.clientId;
+}
+
+// ========================================
 // HELPER: CONVERT TO MILITARY TIME
 // ========================================
 function toMilitaryTime(timeString) {
@@ -80,6 +155,104 @@ function toMilitaryTime(timeString) {
   if (period === 'AM' && hour === 12) hour = 0;
 
   return hour * 100 + minute;
+}
+
+// ========================================
+// HELPER: SEARCH FOR EXISTING CLIENT IN CLIENTTETHER
+// Searches by phone number
+// Returns client_id if found, null if not found
+// ========================================
+async function searchClientTetherClient(phone) {
+  try {
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+
+    if (!cleanPhone) {
+      console.log('No phone provided for ClientTether search');
+      return null;
+    }
+
+    const searchUrl = `${CLIENTTETHER_CONFIG.baseUrl}/read_client_exist?phone=${cleanPhone}`;
+
+    const response = await fetch(searchUrl, {
+      method: 'GET',
+      headers: {
+        'X-Access-Token': CLIENTTETHER_CONFIG.accessToken,
+        'X-Web-Key': CLIENTTETHER_CONFIG.webKey,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.error('ClientTether search failed:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    const resultCode = result.ResultCode || result.resultCode;
+
+    if (resultCode === 'CT_200' || resultCode === 'CT200') {
+      if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+        const clientId = result.data[0].client_id;
+        console.log(`✅ Existing ClientTether client found: ${clientId}`);
+        return clientId;
+      }
+    }
+
+    console.log('No existing ClientTether client found');
+    return null;
+  } catch (error) {
+    console.error('Error searching ClientTether:', error.message);
+    return null;
+  }
+}
+
+// ========================================
+// HELPER: UPDATE EXISTING CLIENT IN CLIENTTETHER
+// Updates an existing client by client_id
+// ========================================
+async function updateClientTetherClient(clientId, customerData) {
+  try {
+    const { first_name, last_name, phone, email, address, zip } = customerData;
+
+    const payload = {
+      client_id: clientId,
+      firstName: first_name || '',
+      lastName: last_name || '',
+      phone: (phone || '').replace(/\D/g, ''),
+      email: email || '',
+      address: address || '',
+      zip: zip || ''
+    };
+
+    console.log('Updating ClientTether client:', clientId);
+
+    const updateUrl = `${CLIENTTETHER_CONFIG.baseUrl}/update_client_by_id`;
+
+    const response = await fetch(updateUrl, {
+      method: 'POST',
+      headers: {
+        'X-Access-Token': CLIENTTETHER_CONFIG.accessToken,
+        'X-Web-Key': CLIENTTETHER_CONFIG.webKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+    const resultCode = result.ResultCode || result.resultCode;
+    const success = (resultCode === 'CT_200' || resultCode === 'CT200');
+
+    if (success) {
+      console.log('✅ ClientTether client updated successfully');
+      return { success: true, result };
+    } else {
+      console.error('⚠️ ClientTether update failed:', result);
+      return { success: false, error: result };
+    }
+  } catch (error) {
+    console.error('⚠️ ClientTether update exception:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 // ========================================
@@ -257,31 +430,48 @@ exports.handler = async (event, context) => {
     const endTime = matchingSlot.endTime;
 
     // ========================================
-    // BUILD APPOINTMENT PAYLOAD
+    // CREATE CLIENT IN TIMETAP FIRST
     // ========================================
     const fullName = `${customer_first_name || 'Unknown'} ${customer_last_name || 'Customer'}`.trim();
 
+    const clientPayload = {
+      firstName: customer_first_name || "Unknown",
+      lastName: customer_last_name || "Customer",
+      fullName: fullName,
+      cellPhone: customer_phone || "",
+      emailAddress: customer_email || "",
+      address1: property_address || "",
+      zip: zip_code || "",
+      status: "Active",
+      fields: [
+        { code: "firstName", value: customer_first_name || "Unknown" },
+        { code: "lastName", value: customer_last_name || "Customer" },
+        { code: "fullName", value: fullName },
+        { code: "emailAddress", value: customer_email || "" },
+        { code: "cellPhone", value: customer_phone || "" },
+        { code: "address1", value: property_address || "" },
+        { code: "zip", value: zip_code || "" }
+      ]
+    };
+
+    // Search for existing client first (duplicate prevention)
+    console.log('Searching for existing TimeTap client by phone:', customer_phone);
+    let clientId = await searchTimeTapClient(sessionToken, businessId, customer_phone);
+
+    if (clientId) {
+      console.log(`✅ Using existing TimeTap client: ${clientId}`);
+    } else {
+      console.log('Creating new client in TimeTap:', JSON.stringify(clientPayload, null, 2));
+      clientId = await createTimeTapClient(sessionToken, clientPayload);
+      console.log(`✅ New TimeTap client created: ${clientId}`);
+    }
+
+    // ========================================
+    // BUILD APPOINTMENT PAYLOAD
+    // ========================================
     const appointmentPayload = {
       businessId: parseInt(businessId),
-      client: {
-        firstName: customer_first_name || "Unknown",
-        lastName: customer_last_name || "Customer",
-        fullName: fullName,
-        cellPhone: customer_phone || "",
-        emailAddress: customer_email || "",
-        address1: property_address || "",
-        zip: zip_code || "",
-        status: "Active",
-        fields: [
-          { code: "firstName", value: customer_first_name || "Unknown" },
-          { code: "lastName", value: customer_last_name || "Customer" },
-          { code: "fullName", value: fullName },
-          { code: "emailAddress", value: customer_email || "" },
-          { code: "cellPhone", value: customer_phone || "" },
-          { code: "address1", value: property_address || "" },
-          { code: "zip", value: zip_code || "" }
-        ]
-      },
+      client: { clientId: clientId },  // Reference the client by ID
       clientStartDate: requested_appointment_date,
       clientEndDate: requested_appointment_date,
       clientStartTime: militaryTime,
@@ -340,25 +530,46 @@ exports.handler = async (event, context) => {
 
     if (bookingResponse.ok) {
       // ========================================
-      // SYNC TO CLIENTTETHER CRM (NON-BLOCKING)
+      // SYNC TO CLIENTTETHER CRM (NON-BLOCKING WITH DUPLICATE CHECKING)
       // ========================================
       // Don't await - sync in background, don't fail booking if CRM sync fails
-      syncToClientTether({
-        first_name: customer_first_name,
-        last_name: customer_last_name,
-        phone: customer_phone,
-        email: customer_email,
-        address: property_address,
-        zip: zip_code
-      }).then(syncResult => {
-        if (syncResult.success) {
-          console.log('✅ Customer synced to ClientTether CRM');
-        } else {
-          console.error('⚠️ ClientTether sync failed (booking still succeeded):', syncResult.error);
+      (async () => {
+        try {
+          console.log('Searching for existing ClientTether client by phone:', customer_phone);
+          const clientTetherClientId = await searchClientTetherClient(customer_phone);
+
+          const customerData = {
+            first_name: customer_first_name,
+            last_name: customer_last_name,
+            phone: customer_phone,
+            email: customer_email,
+            address: property_address,
+            zip: zip_code
+          };
+
+          if (clientTetherClientId) {
+            // Client exists - update
+            console.log(`✅ Updating existing ClientTether client: ${clientTetherClientId}`);
+            const updateResult = await updateClientTetherClient(clientTetherClientId, customerData);
+            if (updateResult.success) {
+              console.log('✅ ClientTether client updated successfully');
+            } else {
+              console.error('⚠️ ClientTether update failed:', updateResult.error);
+            }
+          } else {
+            // Client doesn't exist - create
+            console.log('Creating new ClientTether client');
+            const syncResult = await syncToClientTether(customerData);
+            if (syncResult.success) {
+              console.log('✅ New ClientTether client created');
+            } else {
+              console.error('⚠️ ClientTether creation failed:', syncResult.error);
+            }
+          }
+        } catch (error) {
+          console.error('⚠️ ClientTether sync exception (booking still succeeded):', error);
         }
-      }).catch(syncError => {
-        console.error('⚠️ ClientTether sync exception (booking still succeeded):', syncError);
-      });
+      })();
 
       return {
         statusCode: 200,
@@ -366,7 +577,7 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({
           success: true,
           appointment_id: bookingResult.calendarId || 'Unknown',
-          confirmation_number: bookingResult.appointmentIdHash || 'Unknown',
+          confirmation_number: bookingResult.appointementIdHash || bookingResult.appointmentIdHash || 'Unknown',
           appointment_date: requested_appointment_date,
           appointment_time: confirmed_appointment_time,
           customer_name: `${customer_first_name} ${customer_last_name}`,
