@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const CLIENTTETHER_CONFIG = {
   accessToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJqYXNvbmFsbGVuIiwicm9sZSI6IjUiLCJvcmlnaW4iOiIxIn0.ej3zJE5Ju6rAdU0XctXW-KjS8l52pPdbkEEsDQhPzDc',
   webKey: 'CT_574bf374ca11e449b9b6ffd83d71e341',
+  baseUrl: 'https://api.clienttether.com/v2/api',
   apiUrl: 'https://api.clienttether.com/v2/api/create_client'
 };
 
@@ -92,9 +93,18 @@ async function searchTimeTapClient(sessionToken, businessId, phone) {
 
     // Check if any clients were found
     if (clients && Array.isArray(clients) && clients.length > 0) {
-      const clientId = clients[0].clientId;
-      console.log(`✅ Existing TimeTap client found: ${clientId}`);
-      return clientId;
+      // Find client with matching phone number
+      const matchingClient = clients.find(client => {
+        const clientPhone = (client.cellPhone || '').replace(/\D/g, '');
+        return clientPhone === cleanPhone;
+      });
+
+      if (matchingClient) {
+        console.log(`✅ Existing TimeTap client found: ${matchingClient.clientId} with matching phone ${cleanPhone}`);
+        return matchingClient.clientId;
+      }
+
+      console.log(`⚠️ TimeTap returned ${clients.length} client(s) but none matched phone ${cleanPhone}`);
     }
 
     console.log('No existing TimeTap client found');
