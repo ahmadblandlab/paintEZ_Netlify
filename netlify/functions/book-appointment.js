@@ -58,6 +58,33 @@ async function getTimeTapSession(businessId, apiPrivateKey) {
 }
 
 // ========================================
+// HELPER: CREATE CLIENT IN TIMETAP
+// Creates a client first, returns clientId
+// ========================================
+async function createTimeTapClient(sessionToken, clientData) {
+  const createClientUrl = 'https://api.timetap.com/live/clients';
+
+  const response = await fetch(createClientUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(clientData)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('TimeTap client creation failed:', errorText);
+    throw new Error(`Failed to create client: ${response.status}`);
+  }
+
+  const result = await response.json();
+  console.log('TimeTap client created:', result);
+  return result.clientId;
+}
+
+// ========================================
 // HELPER: CONVERT TO MILITARY TIME
 // ========================================
 function toMilitaryTime(timeString) {
@@ -257,31 +284,40 @@ exports.handler = async (event, context) => {
     const endTime = matchingSlot.endTime;
 
     // ========================================
-    // BUILD APPOINTMENT PAYLOAD
+    // CREATE CLIENT IN TIMETAP FIRST
     // ========================================
     const fullName = `${customer_first_name || 'Unknown'} ${customer_last_name || 'Customer'}`.trim();
 
+    const clientPayload = {
+      firstName: customer_first_name || "Unknown",
+      lastName: customer_last_name || "Customer",
+      fullName: fullName,
+      cellPhone: customer_phone || "",
+      emailAddress: customer_email || "",
+      address1: property_address || "",
+      zip: zip_code || "",
+      status: "Active",
+      fields: [
+        { code: "firstName", value: customer_first_name || "Unknown" },
+        { code: "lastName", value: customer_last_name || "Customer" },
+        { code: "fullName", value: fullName },
+        { code: "emailAddress", value: customer_email || "" },
+        { code: "cellPhone", value: customer_phone || "" },
+        { code: "address1", value: property_address || "" },
+        { code: "zip", value: zip_code || "" }
+      ]
+    };
+
+    console.log('Creating client in TimeTap:', JSON.stringify(clientPayload, null, 2));
+    const clientId = await createTimeTapClient(sessionToken, clientPayload);
+    console.log('Client created with ID:', clientId);
+
+    // ========================================
+    // BUILD APPOINTMENT PAYLOAD
+    // ========================================
     const appointmentPayload = {
       businessId: parseInt(businessId),
-      client: {
-        firstName: customer_first_name || "Unknown",
-        lastName: customer_last_name || "Customer",
-        fullName: fullName,
-        cellPhone: customer_phone || "",
-        emailAddress: customer_email || "",
-        address1: property_address || "",
-        zip: zip_code || "",
-        status: "Active",
-        fields: [
-          { code: "firstName", value: customer_first_name || "Unknown" },
-          { code: "lastName", value: customer_last_name || "Customer" },
-          { code: "fullName", value: fullName },
-          { code: "emailAddress", value: customer_email || "" },
-          { code: "cellPhone", value: customer_phone || "" },
-          { code: "address1", value: property_address || "" },
-          { code: "zip", value: zip_code || "" }
-        ]
-      },
+      client: { clientId: clientId },  // Reference the client by ID
       clientStartDate: requested_appointment_date,
       clientEndDate: requested_appointment_date,
       clientStartTime: militaryTime,
@@ -366,7 +402,7 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({
           success: true,
           appointment_id: bookingResult.calendarId || 'Unknown',
-          confirmation_number: bookingResult.appointmentIdHash || 'Unknown',
+          confirmation_number: bookingResult.appointementIdHash || bookingResult.appointmentIdHash || 'Unknown',
           appointment_date: requested_appointment_date,
           appointment_time: confirmed_appointment_time,
           customer_name: `${customer_first_name} ${customer_last_name}`,
