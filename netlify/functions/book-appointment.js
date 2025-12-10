@@ -93,9 +93,16 @@ async function searchTimeTapClient(sessionToken, businessId, phone) {
 
     // Check if any clients were found
     if (clients && Array.isArray(clients) && clients.length > 0) {
+      // Log what we got back for debugging
+      console.log(`TimeTap search returned ${clients.length} client(s) for phone ${cleanPhone}:`);
+      clients.forEach((c, i) => {
+        console.log(`  [${i}] clientId: ${c.clientId}, cellPhone: "${c.cellPhone}", fullName: "${c.fullName}"`);
+      });
+
       // Find client with matching phone number
       const matchingClient = clients.find(client => {
         const clientPhone = (client.cellPhone || '').replace(/\D/g, '');
+        console.log(`  Comparing: "${clientPhone}" === "${cleanPhone}" ?`, clientPhone === cleanPhone);
         return clientPhone === cleanPhone;
       });
 
@@ -445,6 +452,7 @@ exports.handler = async (event, context) => {
     const fullName = `${customer_first_name || 'Unknown'} ${customer_last_name || 'Customer'}`.trim();
 
     const clientPayload = {
+      businessId: parseInt(businessId),
       firstName: customer_first_name || "Unknown",
       lastName: customer_last_name || "Customer",
       fullName: fullName,
