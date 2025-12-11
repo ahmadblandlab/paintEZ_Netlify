@@ -463,13 +463,17 @@ exports.handler = async (event, context) => {
       status: "Active"
     };
 
-    // TEMPORARILY DISABLED: TimeTap search API returns wrong clients
-    // Search returns Sarah Books (9194511764) when searching for 8135551234
-    // TODO: Fix search or implement alternative duplicate prevention
-    console.log('⚠️ Client search disabled - TimeTap search API unreliable');
-    console.log('Creating new client in TimeTap:', JSON.stringify(clientPayload, null, 2));
-    let clientId = await createTimeTapClient(sessionToken, clientPayload);
-    console.log(`✅ New TimeTap client created: ${clientId}`);
+    // Search for existing client first (duplicate prevention)
+    console.log('Searching for existing TimeTap client by phone:', customer_phone);
+    let clientId = await searchTimeTapClient(sessionToken, businessId, customer_phone);
+
+    if (clientId) {
+      console.log(`✅ Using existing TimeTap client: ${clientId}`);
+    } else {
+      console.log('Creating new client in TimeTap:', JSON.stringify(clientPayload, null, 2));
+      clientId = await createTimeTapClient(sessionToken, clientPayload);
+      console.log(`✅ New TimeTap client created: ${clientId}`);
+    }
 
     // ========================================
     // BUILD APPOINTMENT PAYLOAD
