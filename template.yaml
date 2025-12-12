@@ -1,0 +1,199 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: PaintEZ Multi-Location Appointment & CRM System - Cost-Optimized Production
+
+# ========================================
+# GLOBAL SETTINGS
+# Optimized for: 100+ concurrent calls, near-zero cost
+# ========================================
+Globals:
+  Function:
+    Timeout: 30 # Max execution time (seconds)
+    MemorySize: 256 # RAM allocated (MB) - cost-optimized
+    Runtime: nodejs20.x # Node.js version
+    Architectures:
+      - x86_64 # CPU architecture
+    Environment:
+      Variables:
+        NODE_ENV: production # Environment variable
+    # NO Tracing - saves cost, use CloudWatch Logs instead
+    # NO ReservedConcurrency - allow auto-scaling to 1000 concurrent
+    # NO DeadLetterQueue - your code has error handling built-in
+
+# ========================================
+# RESOURCES
+# This section defines what AWS should create
+# ========================================
+Resources:
+  # ========================================
+  # LAMBDA FUNCTION 1: Check Availability
+  # ========================================
+  CheckAvailabilityFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-check-availability
+      CodeUri: netlify/functions/
+      Handler: check-availability.handler
+      Description: Check available appointment times for a location
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /check-availability
+            Method: POST
+
+  # ========================================
+  # LAMBDA FUNCTION 2: Book Appointment
+  # ========================================
+  BookAppointmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-book-appointment
+      CodeUri: netlify/functions/
+      Handler: book-appointment.handler
+      Description: Book appointment and sync to ClientTether CRM
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /book-appointment
+            Method: POST
+
+  # ========================================
+  # LAMBDA FUNCTION 3: Check Client
+  # ========================================
+  CheckClientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-check-client
+      CodeUri: netlify/functions/
+      Handler: check-client.handler
+      Description: Check if client exists in ClientTether CRM
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /check-client
+            Method: POST
+
+  # ========================================
+  # LAMBDA FUNCTION 4: Create/Update Client
+  # ========================================
+  CreateUpdateClientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-create-update-client
+      CodeUri: netlify/functions/
+      Handler: create-update-client.handler
+      Description: Create or update client in ClientTether CRM
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /create-update-client
+            Method: POST
+
+  # ========================================
+  # LAMBDA FUNCTION 5: Delete Client
+  # ========================================
+  DeleteClientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-delete-client
+      CodeUri: netlify/functions/
+      Handler: delete-client.handler
+      Description: Delete client from ClientTether CRM (testing only)
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /delete-client
+            Method: POST
+
+  # ========================================
+  # LAMBDA FUNCTION 6: Setup Location
+  # ========================================
+  SetupLocationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-setup-location
+      CodeUri: netlify/functions/
+      Handler: setup-location.handler
+      Description: Discover IDs for new franchise location
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /setup-location
+            Method: POST
+
+  # ========================================
+  # LAMBDA FUNCTION 7: Validate Zipcode
+  # ========================================
+  ValidateZipcodeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paintez-validate-zipcode
+      CodeUri: netlify/functions/
+      Handler: validate-zipcode.handler
+      Description: Validate US zipcode format
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /validate-zipcode
+            Method: POST
+
+  # ========================================
+  # MONITORING: Simple Error Alarm (Free Tier)
+  # ========================================
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: paintez-lambda-errors
+      AlarmDescription: Alert when Lambda functions have errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 10 # Alert if 10+ errors in 5 minutes
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+# ========================================
+# OUTPUTS
+# These are the URLs you'll use in Bland AI
+# ========================================
+Outputs:
+  ApiUrl:
+    Description: Base API Gateway URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  CheckAvailabilityUrl:
+    Description: Check Availability Endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/check-availability"
+
+  BookAppointmentUrl:
+    Description: Book Appointment Endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/book-appointment"
+
+  CheckClientUrl:
+    Description: Check Client Endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/check-client"
+
+  CreateUpdateClientUrl:
+    Description: Create/Update Client Endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/create-update-client"
+
+  DeleteClientUrl:
+    Description: Delete Client Endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/delete-client"
+
+  SetupLocationUrl:
+    Description: Setup Location Endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/setup-location"
+
+  ValidateZipcodeUrl:
+    Description: Validate Zipcode Endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/validate-zipcode"
