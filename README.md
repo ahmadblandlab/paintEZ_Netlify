@@ -9,6 +9,7 @@
 ## What This System Does
 
 **For Customers:**
+
 1. Customer calls PaintEZ franchise → Bland AI answers
 2. AI collects project details and preferred date
 3. System checks TimeTap for real-time availability
@@ -18,6 +19,7 @@
 7. Confirmation sent!
 
 **For Franchises:**
+
 - 24/7 automated booking across unlimited locations
 - **Automatic duplicate prevention** - no duplicate client records
 - Automatic CRM customer tracking
@@ -55,23 +57,27 @@ Netlify Functions (API Layer)
 ### How It Works:
 
 **TimeTap (Scheduling):**
+
 1. When booking an appointment, **search by phone number first**
 2. If client exists → **reuse their clientId** (no duplicate created)
 3. If not found → create new client and get clientId
 4. Book appointment with clientId (existing or new)
 
 **ClientTether (CRM):**
+
 1. Search by phone number
 2. If client exists → **update their information**
 3. If not found → create new client record
 
 ### Benefits:
+
 - ✅ **No duplicate client records** for repeat customers
 - ✅ **Clean database** - one record per customer
 - ✅ **Accurate customer history** - all appointments linked to same client
 - ✅ **Better marketing data** - no inflated customer counts
 
 ### Technical Details:
+
 - **Primary identifier:** Phone number (cleaned, digits only)
 - **Search endpoint:** `GET /clients?businessId=X&cellPhone=Y`
 - **Matching logic:** Exact phone number match after removing formatting
@@ -85,19 +91,63 @@ Netlify Functions (API Layer)
 
 ### TimeTap Integration (Appointment Scheduling)
 
-#### 1. Check Availability
+#### 1. Validate Zipcode
+
+**Endpoint:** `validate-zipcode`
+**Method:** POST
+
+**Request:**
+
+```json
+{
+  "zipcode": "34638"
+}
+```
+
+**Response (Serviceable):**
+
+```json
+{
+  "success": true,
+  "serviceable": true,
+  "zipcode": "34638",
+  "location_id": "paintez_north_tampa",
+  "territory_name": "North Tampa",
+  "franchise_owner": "Tom Reilly",
+  "phone_number": "(813) 738-6289",
+  "message": "Great! We service your area in North Tampa."
+}
+```
+
+**Response (Not Serviceable):**
+
+```json
+{
+  "success": true,
+  "serviceable": false,
+  "zipcode": "99999",
+  "message": "I'm sorry, we don't currently service your zip code..."
+}
+```
+
+---
+
+#### 2. Check Availability
+
 **Endpoint:** `check-availability`
 **Method:** POST
 
 **Request:**
+
 ```json
 {
   "location_id": "paintez_north_tampa",
-  "requested_appointment_date": "2025-12-20"
+  "requested_appointment_date": "2025-12-21"
 }
 ```
 
 **Response:**
+
 ```json
 {
   "available_times": "9:00 AM, 2:00 PM, 4:00 PM",
@@ -108,11 +158,13 @@ Netlify Functions (API Layer)
 
 ---
 
-#### 2. Book Appointment (WITH DUPLICATE PREVENTION)
+#### 3. Book Appointment (WITH DUPLICATE PREVENTION)
+
 **Endpoint:** `book-appointment`
 **Method:** POST
 
 **Request:**
+
 ```json
 {
   "location_id": "paintez_north_tampa",
@@ -129,6 +181,7 @@ Netlify Functions (API Layer)
 ```
 
 **Response (New Customer):**
+
 ```json
 {
   "success": true,
@@ -143,6 +196,7 @@ Netlify Functions (API Layer)
 ```
 
 **Response (Repeat Customer - Reused Existing Client):**
+
 ```json
 {
   "success": true,
@@ -157,6 +211,7 @@ Netlify Functions (API Layer)
 ```
 
 **Behind the Scenes:**
+
 1. Searches TimeTap for existing client by phone: `555-123-4567`
 2. **If found:** Logs `✅ Using existing TimeTap client: 23662078`
 3. **If not found:** Creates new client, logs `✅ New TimeTap client created: 23662078`
@@ -170,16 +225,20 @@ Netlify Functions (API Layer)
 ### ClientTether Integration (CRM)
 
 #### 3. Check Client
+
 **Endpoint:** `check-client`
 **Method:** POST
 
 **Request:**
+
 ```json
 {
   "customer_phone": "555-123-4567"
 }
 ```
+
 OR
+
 ```json
 {
   "customer_email": "sarah@example.com"
@@ -187,6 +246,7 @@ OR
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -203,10 +263,12 @@ OR
 ---
 
 #### 4. Create/Update Client
+
 **Endpoint:** `create-update-client`
 **Method:** POST
 
 **Request:**
+
 ```json
 {
   "customer_first_name": "Sarah",
@@ -218,6 +280,7 @@ OR
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -232,10 +295,12 @@ OR
 ---
 
 #### 5. Delete Client
+
 **Endpoint:** `delete-client`
 **Method:** POST
 
 **Request:**
+
 ```json
 {
   "client_id": "27918675"
@@ -243,6 +308,7 @@ OR
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -305,20 +371,20 @@ Each franchise location requires configuration in `LOCATION_CONFIGS`:
 
 ```javascript
 const LOCATION_CONFIGS = {
-  'paintez_north_tampa': {
-    businessId: '406031',
-    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+  paintez_north_tampa: {
+    businessId: "406031",
+    apiPrivateKey: "03c87c55bb7f43b0ad77e5bed7f732da",
     staffId: 513927,
     locationId: 635883,
-    reasonId: 735070
+    reasonId: 735070,
   },
-  'current_location': {
-    businessId: '403923',
-    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+  current_location: {
+    businessId: "403923",
+    apiPrivateKey: "03c87c55bb7f43b0ad77e5bed7f732da",
     staffId: 512602,
     locationId: 634895,
-    reasonId: 733663
-  }
+    reasonId: 733663,
+  },
 };
 ```
 
@@ -354,6 +420,7 @@ const LOCATION_CONFIGS = {
 ### Critical Webhook Settings
 
 **Both webhooks MUST have:**
+
 - **Method:** POST
 - **Header:** `Content-Type: application/json`
 - **✅ "Wait for Response" ENABLED** (Synchronous mode)
@@ -363,13 +430,16 @@ const LOCATION_CONFIGS = {
 ## Adding New Franchise Locations
 
 ### Step 1: Get TimeTap Credentials
+
 From franchise's TimeTap account:
+
 - Business ID (API Key)
 - API Private Key
 
 ### Step 2: Discover IDs
 
 **Use the setup endpoint:**
+
 ```bash
 curl -X POST https://paintez-bland.netlify.app/.netlify/functions/setup-location \
   -H "Content-Type: application/json" \
@@ -381,6 +451,7 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/setup-location
 ```
 
 **Response includes:**
+
 - All staff IDs
 - All location IDs
 - All reason/service IDs
@@ -389,6 +460,7 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/setup-location
 ### Step 3: Add to LOCATION_CONFIGS
 
 Update both files:
+
 - `netlify/functions/check-availability.js`
 - `netlify/functions/book-appointment.js`
 
@@ -403,6 +475,7 @@ git push origin main
 ```
 
 Test availability:
+
 ```bash
 curl -X POST https://paintez-bland.netlify.app/.netlify/functions/check-availability \
   -H "Content-Type: application/json" \
@@ -447,14 +520,17 @@ headers: {
 ### Field Names (camelCase)
 
 **Correct:**
+
 - `firstName`, `lastName`, `phone`, `address`, `zip`
 
 **Wrong (don't use):**
+
 - `first_name`, `last_name`, `access_token`, `web_key`
 
 ### Automatic CRM Sync with Duplicate Prevention
 
 **book-appointment.js automatically:**
+
 1. Books appointment in TimeTap (with duplicate prevention)
 2. Searches ClientTether for existing client by phone
 3. If found → Updates existing client record
@@ -467,6 +543,7 @@ headers: {
 ## Testing Commands
 
 **Check Availability:**
+
 ```bash
 curl -X POST https://paintez-bland.netlify.app/.netlify/functions/check-availability \
   -H "Content-Type: application/json" \
@@ -474,6 +551,7 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/check-availabi
 ```
 
 **Book Appointment (New Customer):**
+
 ```bash
 curl -X POST https://paintez-bland.netlify.app/.netlify/functions/book-appointment \
   -H "Content-Type: application/json" \
@@ -492,6 +570,7 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/book-appointme
 ```
 
 **Book Appointment (Repeat Customer - Should Reuse Client):**
+
 ```bash
 curl -X POST https://paintez-bland.netlify.app/.netlify/functions/book-appointment \
   -H "Content-Type: application/json" \
@@ -508,9 +587,11 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/book-appointme
     "project_type": "Touch-up"
   }'
 ```
+
 **Expected:** Second booking reuses existing clientId (check Netlify logs for "✅ Using existing TimeTap client")
 
 **Check Client:**
+
 ```bash
 curl -X POST https://paintez-bland.netlify.app/.netlify/functions/check-client \
   -H "Content-Type: application/json" \
@@ -518,6 +599,7 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/check-client \
 ```
 
 **Create Client:**
+
 ```bash
 curl -X POST https://paintez-bland.netlify.app/.netlify/functions/create-update-client \
   -H "Content-Type: application/json" \
@@ -535,13 +617,17 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/create-update-
 ## Troubleshooting
 
 ### Error: "Missing required parameter: location_id"
+
 **Fix:** Add `"location_id": "paintez_north_tampa"` to request body
 
 ### Error: "Unknown location_id"
+
 **Fix:** Use one of the configured locations or add new location to LOCATION_CONFIGS
 
 ### Error: "no available times"
+
 **Causes:**
+
 - Date in past
 - No availability in TimeTap for that date/staff
 - Wrong IDs in configuration
@@ -549,10 +635,13 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/create-update-
 **Fix:** Try different date or verify configuration
 
 ### Bland AI not getting response
+
 **Fix:** Enable "Wait for Response" in Bland AI webhook settings
 
 ### ClientTether returns CT_501
+
 **Causes:**
+
 - Missing required field
 - Invalid authentication
 - Wrong endpoint format
@@ -560,7 +649,9 @@ curl -X POST https://paintez-bland.netlify.app/.netlify/functions/create-update-
 **Fix:** Verify all fields present and authentication headers correct
 
 ### Duplicate clients still being created
+
 **Check Netlify logs for:**
+
 ```
 Searching for existing TimeTap client by phone: XXXXX
 TimeTap search returned X client(s) for phone XXXXX:
@@ -569,14 +660,17 @@ TimeTap search returned X client(s) for phone XXXXX:
 ```
 
 **If search returns 0 clients but client exists:**
+
 - Verify phone format in TimeTap (must have digits)
 - Check businessId is correct for that location
 
 **If comparison returns false:**
+
 - Phone formats don't match (one has formatting, other doesn't)
 - This is now handled automatically (both cleaned before comparison)
 
 ### Client creation fails with NullPointerException
+
 **Fix:** Verify `businessId` is included in client payload (now automatically added)
 
 ---
@@ -584,6 +678,7 @@ TimeTap search returned X client(s) for phone XXXXX:
 ## Debugging Tips
 
 ### View Netlify Function Logs:
+
 1. Go to: https://app.netlify.com/sites/paintez-bland/logs
 2. Look for your function execution
 3. Check for client search logs
@@ -591,12 +686,14 @@ TimeTap search returned X client(s) for phone XXXXX:
 ### Key Log Messages to Look For:
 
 **Duplicate Prevention Working:**
+
 ```
 ✅ Existing TimeTap client found: 23662078 with matching phone 8135551234
 ✅ Using existing TimeTap client: 23662078
 ```
 
 **New Client Created:**
+
 ```
 No existing TimeTap client found
 Creating new client in TimeTap: {...}
@@ -604,6 +701,7 @@ Creating new client in TimeTap: {...}
 ```
 
 **ClientTether Sync:**
+
 ```
 ✅ Existing ClientTether client found: 27918675
 ✅ ClientTether client updated successfully
@@ -613,21 +711,23 @@ Creating new client in TimeTap: {...}
 
 ## Configured Locations
 
-| location_id | Business Name | Status |
-|------------|--------------|--------|
-| `current_location` | Original location | Production |
-| `paintez_north_tampa` | North Tampa | Production ✅ |
-| `sandbox` | Testing | Development |
+| location_id           | Business Name     | Status        |
+| --------------------- | ----------------- | ------------- |
+| `current_location`    | Original location | Production    |
+| `paintez_north_tampa` | North Tampa       | Production ✅ |
+| `sandbox`             | Testing           | Development   |
 
 ---
 
 ## Required Variables for Bland AI
 
 **Check Availability needs:**
+
 - `location_id`
 - `requested_appointment_date` (YYYY-MM-DD)
 
 **Book Appointment needs:**
+
 - `location_id`
 - `customer_first_name`
 - `customer_last_name`
@@ -644,6 +744,7 @@ Creating new client in TimeTap: {...}
 ## Recent Updates (December 2025)
 
 ### ✅ Duplicate Client Prevention (v4.0)
+
 - **Added:** Automatic client search before creation in TimeTap
 - **Added:** Phone-based duplicate detection
 - **Added:** ClientTether duplicate checking and update
@@ -653,11 +754,13 @@ Creating new client in TimeTap: {...}
 - **Result:** Clean customer database, no duplicate records
 
 ### ✅ TimeTap Client Management (v3.5)
+
 - **Fixed:** 2-step client creation process (create client, then book appointment)
 - **Fixed:** TimeTap API typo handling (`appointementIdHash`)
 - **Fixed:** Field name corrections (`address1` per API spec)
 
 ### ✅ ClientTether Integration (v3.0)
+
 - **Added:** CRM sync with duplicate prevention
 - **Added:** Update existing clients instead of creating duplicates
 - **Added:** Non-blocking background sync
@@ -676,12 +779,14 @@ Creating new client in TimeTap: {...}
 ## Support
 
 **Issues?**
+
 1. Check troubleshooting section
 2. Test endpoints directly with curl
 3. Check Netlify function logs for duplicate prevention messages
 4. Verify TimeTap/ClientTether dashboards
 
 **Contact team with:**
+
 - Error message
 - Request payload
 - Netlify logs (especially client search logs)
