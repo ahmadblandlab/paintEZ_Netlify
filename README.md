@@ -114,7 +114,8 @@ Netlify Functions (API Layer)
   "location_id": "paintez_north_tampa",
   "territory_name": "North Tampa",
   "franchise_owner": "Tom Reilly",
-  "phone_number": "(813) 738-6289",
+  "franchise_phone_number": "(813) 738-6289",
+  "franchise_owner_email": "tom@paintez.com",
   "message": "Great! We service your area in North Tampa."
 }
 ```

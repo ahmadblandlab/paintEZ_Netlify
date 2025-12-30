@@ -38,8 +38,25 @@ const LOCATION_CONFIGS = {
     staffId: 512277,
     locationId: 634571,
     reasonId: 733416
+  },
+  'carmel_and_indianapolis': {
+    businessId: '408408',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 515885,
+    locationId: 637401,
+    reasonId: 737203,
+    clientTetherWebKey: 'CT_cc019043d0d49f0ce90b3c20e4f9189d'
+  },
+  'mountainside': {
+    businessId: '408410',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 515887,
+    locationId: 637403,
+    reasonId: 737213,
+    clientTetherWebKey: 'CT_85b33b9016e7c52400671e8161107fd7'
   }
   // Add more locations as franchises get cloned...
+
 };
 
 // ========================================
@@ -179,9 +196,10 @@ function toMilitaryTime(timeString) {
 // Searches by phone number
 // Returns client_id if found, null if not found
 // ========================================
-async function searchClientTetherClient(phone) {
+async function searchClientTetherClient(phone, webKeyOverride = null) {
   try {
     const cleanPhone = (phone || '').replace(/\D/g, '');
+    const webKey = webKeyOverride || CLIENTTETHER_CONFIG.webKey;
 
     if (!cleanPhone) {
       console.log('No phone provided for ClientTether search');
@@ -194,10 +212,11 @@ async function searchClientTetherClient(phone) {
       method: 'GET',
       headers: {
         'X-Access-Token': CLIENTTETHER_CONFIG.accessToken,
-        'X-Web-Key': CLIENTTETHER_CONFIG.webKey,
+        'X-Web-Key': webKey,
         'Content-Type': 'application/json'
       }
     });
+
 
     if (!response.ok) {
       console.error('ClientTether search failed:', response.status);
@@ -227,9 +246,11 @@ async function searchClientTetherClient(phone) {
 // HELPER: UPDATE EXISTING CLIENT IN CLIENTTETHER
 // Updates an existing client by client_id
 // ========================================
-async function updateClientTetherClient(clientId, customerData) {
+async function updateClientTetherClient(clientId, customerData, webKeyOverride = null) {
   try {
     const { first_name, last_name, phone, email, address, zip } = customerData;
+    const webKey = webKeyOverride || CLIENTTETHER_CONFIG.webKey;
+
 
     const payload = {
       client_id: clientId,
@@ -249,11 +270,12 @@ async function updateClientTetherClient(clientId, customerData) {
       method: 'POST',
       headers: {
         'X-Access-Token': CLIENTTETHER_CONFIG.accessToken,
-        'X-Web-Key': CLIENTTETHER_CONFIG.webKey,
+        'X-Web-Key': webKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
+
 
     const result = await response.json();
     const resultCode = result.ResultCode || result.resultCode;
@@ -276,9 +298,11 @@ async function updateClientTetherClient(clientId, customerData) {
 // HELPER: SYNC TO CLIENTTETHER CRM
 // Uses correct ClientTether API v2.0 format verified from official docs
 // ========================================
-async function syncToClientTether(customerData) {
+async function syncToClientTether(customerData, webKeyOverride = null) {
   try {
     const { first_name, last_name, phone, email, address, zip } = customerData;
+    const webKey = webKeyOverride || CLIENTTETHER_CONFIG.webKey;
+
 
     // Build payload with correct field names (camelCase, not snake_case)
     const payload = {
@@ -297,11 +321,12 @@ async function syncToClientTether(customerData) {
       method: 'POST',
       headers: {
         'X-Access-Token': CLIENTTETHER_CONFIG.accessToken,
-        'X-Web-Key': CLIENTTETHER_CONFIG.webKey,
+        'X-Web-Key': webKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
+
 
     const result = await response.json();
 
@@ -544,8 +569,9 @@ exports.handler = async (event, context) => {
       // Don't await - sync in background, don't fail booking if CRM sync fails
       (async () => {
         try {
+          const webKey = config.clientTetherWebKey || null;
           console.log('Searching for existing ClientTether client by phone:', customer_phone);
-          const clientTetherClientId = await searchClientTetherClient(customer_phone);
+          const clientTetherClientId = await searchClientTetherClient(customer_phone, webKey);
 
           const customerData = {
             first_name: customer_first_name,
@@ -559,7 +585,7 @@ exports.handler = async (event, context) => {
           if (clientTetherClientId) {
             // Client exists - update
             console.log(`✅ Updating existing ClientTether client: ${clientTetherClientId}`);
-            const updateResult = await updateClientTetherClient(clientTetherClientId, customerData);
+            const updateResult = await updateClientTetherClient(clientTetherClientId, customerData, webKey);
             if (updateResult.success) {
               console.log('✅ ClientTether client updated successfully');
             } else {
@@ -568,7 +594,7 @@ exports.handler = async (event, context) => {
           } else {
             // Client doesn't exist - create
             console.log('Creating new ClientTether client');
-            const syncResult = await syncToClientTether(customerData);
+            const syncResult = await syncToClientTether(customerData, webKey);
             if (syncResult.success) {
               console.log('✅ New ClientTether client created');
             } else {
@@ -579,6 +605,7 @@ exports.handler = async (event, context) => {
           console.error('⚠️ ClientTether sync exception (booking still succeeded):', error);
         }
       })();
+
 
       return {
         statusCode: 200,

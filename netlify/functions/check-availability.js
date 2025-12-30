@@ -26,8 +26,23 @@ const LOCATION_CONFIGS = {
     staffId: 512277,
     locationId: 634571,
     reasonId: 733416
+  },
+  'carmel_and_indianapolis': {
+    businessId: '408408',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 515885,
+    locationId: 637401,
+    reasonId: 737203
+  },
+  'mountainside': {
+    businessId: '408410',
+    apiPrivateKey: '03c87c55bb7f43b0ad77e5bed7f732da',
+    staffId: 515887,
+    locationId: 637403,
+    reasonId: 737213
   }
   // Add more locations as franchises get cloned...
+
 };
 
 // ========================================
