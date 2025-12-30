@@ -2,7 +2,8 @@
 
 **Automated appointment booking system integrating Bland AI with TimeTap scheduling and ClientTether CRM**
 
-**Live System:** `https://paintez-bland.netlify.app`
+**Live System (Netlify):** `https://paintez-bland.netlify.app`
+**Live System (AWS Production):** `https://i653v46fzd.execute-api.us-east-1.amazonaws.com/Prod/`
 
 ---
 
@@ -87,7 +88,8 @@ Netlify Functions (API Layer)
 
 ## API Endpoints
 
-**Base URL:** `https://paintez-bland.netlify.app/.netlify/functions/`
+**Base URL (AWS Production):** `https://i653v46fzd.execute-api.us-east-1.amazonaws.com/Prod/`
+**Base URL (Netlify Backup):** `https://paintez-bland.netlify.app/.netlify/functions/`
 
 ### TimeTap Integration (Appointment Scheduling)
 
@@ -374,17 +376,26 @@ Each franchise location requires configuration in `LOCATION_CONFIGS`:
 const LOCATION_CONFIGS = {
   paintez_north_tampa: {
     businessId: "406031",
-    apiPrivateKey: "03c87c55bb7f43b0ad77e5bed7f732da",
+    apiPrivateKey: "03c87c55...",
     staffId: 513927,
     locationId: 635883,
     reasonId: 735070,
   },
-  current_location: {
-    businessId: "403923",
-    apiPrivateKey: "03c87c55bb7f43b0ad77e5bed7f732da",
-    staffId: 512602,
-    locationId: 634895,
-    reasonId: 733663,
+  carmel_and_indianapolis: {
+    businessId: "408408",
+    apiPrivateKey: "03c87c55...",
+    staffId: 515885,
+    locationId: 637401,
+    reasonId: 737203,
+    clientTetherWebKey: "CT_cc019043d0d49f0ce90b3c20e4f9189d",
+  },
+  mountainside: {
+    businessId: "408410",
+    apiPrivateKey: "03c87c55...",
+    staffId: 515887,
+    locationId: 637403,
+    reasonId: 737213,
+    clientTetherWebKey: "CT_85b33b9016e7c52400671e8161107fd7",
   },
 };
 ```
@@ -712,11 +723,13 @@ Creating new client in TimeTap: {...}
 
 ## Configured Locations
 
-| location_id           | Business Name     | Status        |
-| --------------------- | ----------------- | ------------- |
-| `current_location`    | Original location | Production    |
-| `paintez_north_tampa` | North Tampa       | Production ✅ |
-| `sandbox`             | Testing           | Development   |
+| location_id               | Business Name          | Status        |
+| ------------------------- | ---------------------- | ------------- |
+| `paintez_north_tampa`     | North Tampa            | Production ✅ |
+| `carmel_and_indianapolis` | Carmel & Indianapolis  | Production ✅ |
+| `mountainside`            | Mountainside           | Production ✅ |
+| `current_location`        | Original Test Location | Production    |
+| `sandbox`                 | Testing                | Development   |
 
 ---
 
@@ -743,6 +756,14 @@ Creating new client in TimeTap: {...}
 ---
 
 ## Recent Updates (December 2025)
+
+### ✅ Multi-Franchise Expansion (v5.0 - Dec 30)
+
+- **Added:** New production locations for **Carmel & Indianapolis** and **Mountainside**.
+- **Added:** Support for **per-location ClientTether webKeys**, allowing leads to route to separate CRM accounts.
+- **Improved:** Standardized API field names (renamed `phone_number` to `franchise_phone_number`).
+- **Improved:** AWS Lambda deployment via AWS SAM for production reliability.
+- **Fixed:** Automated ID discovery for all child accounts to ensure zero-config scaling.
 
 ### ✅ Duplicate Client Prevention (v4.0)
 
